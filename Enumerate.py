@@ -12,12 +12,12 @@ def check_credentials(vuln, request_data, user):
 
     if vuln:  # Password Enumeration
         if user and request_data.get('password') != user.password:
-            return Response(error_message_helper(password_error_message), 200, mimetype="application/json")
+            return error_message_helper(password_error_message)
         elif not user:  # User enumeration
-            return Response(error_message_helper(user_error_message), 200, mimetype="application/json")
+            return error_message_helper(user_error_message)
     else:
         if (user and request_data.get('password') != user.password) or (not user):
-            return Response(error_message_helper(password_error_message + " Week2 Completed"), 200, mimetype="application/json")
+            return error_message_helper(password_error_message + " Week2 Completed")
 
     return None
 
@@ -54,9 +54,6 @@ if __name__ == "__main__":
 
     response = check_credentials(vuln, request_data, user)
     if response:
-        try:
-            print(response.get_json())  # Or handle the response appropriately
-        except Exception as e:
-            print(f"Failed to decode response JSON: {str(e)}")
+        print(response)  # Print the dictionary directly
     else:
         enumerate_users()
