@@ -47,3 +47,29 @@ jobs:
         run: |
           WEEK1_CONTAINER=$(curl -X POST -H "Authorization: Bearer $AZURE_ACCESS_TOKEN" -d "$DOCKERHUB_USERNAME/devops-labs" https://devsecops-ver.azurewebsites.net/api/week1-container)
           echo "Week1 container upload: $WEEK1_CONTAINER"
+sonarqube:
+    needs: test
+    if: true
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        # Disabling shallow clones is recommended for improving the relevancy of reporting
+        fetch-depth: 0
+    - name: SonarQube Scan
+      uses: sonarsource/sonarqube-scan-action@master
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+       run: |
+        sleep 30
+        URL="${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?p=1&projectKey=devsecops-app&branch=main"
+        echo "Report URL $URL"
+        curl -u ${{ secrets.SONAR_TOKEN }}: "$URL" -o sonarqube-report.json 
+        
+        - name: Upload SonarQube report
+       id: artifact-sonarqube
+       uses: actions/upload-artifact@v4
+       with:
+        name: sonarqube-report
+        path: sonarqube-report.json
