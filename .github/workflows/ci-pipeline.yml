@@ -49,7 +49,6 @@ jobs:
           echo "Week1 container upload: $WEEK1_CONTAINER"
   
   sonarqube:
-    needs: test
     if: true
     runs-on: ubuntu-latest
     steps:
