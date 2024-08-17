@@ -9,6 +9,25 @@ jobs:
       - uses: actions/checkout@v4
       # Add your test steps here
 
+  image-scan:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan image
+        uses: anchore/scan-action@v3
+        id: image-scan
+        with:
+          image: ${{ secrets.DOCKERHUB_USERNAME }}/devops-labs:latest
+          fail-build: false
+          output-format: json
+      - name: Save Image Scan Report
+        run: echo "${{ steps.image-scan.outputs.json }}" > image-scan-report.json
+      - name: Upload Image report
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-report
+          path: image-scan-report.json
+
   sonarqube:
     needs: test
     runs-on: ubuntu-latest
@@ -88,7 +107,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zap-report
-          path: report_html.html             
+          path: report_json.json  # Adjust the output file to match the expected name in security_gate
 
   build:
     needs: [sonarqube, dast]
@@ -112,7 +131,6 @@ jobs:
 
   submit_results:
     needs: [build]
-    if: true
     runs-on: ubuntu-latest
     steps:
       - uses: azure/login@v1
@@ -141,28 +159,31 @@ jobs:
         run: |
           WEEK1_CONTAINER=$(curl -X POST -H "Authorization: Bearer $AZURE_ACCESS_TOKEN" -d "$DOCKERHUB_USERNAME/devops-labs" https://devsecops-ver.azurewebsites.net/api/week1-container)
           echo "Week1 container upload: $WEEK1_CONTAINER"
-
-          SONAR_RESPONSE=$(curl -X POST -H "Authorization: Bearer $AZURE_ACCESS_TOKEN"  --data-binary @$GITHUB_WORKSPACE/sonarqube-report.json https://devsecops-ver.azurewebsites.net/api/week3-sonar-report)
+          SONAR_RESPONSE=$(curl -X POST -H "Authorization: Bearer $AZURE_ACCESS_TOKEN" --data-binary @$GITHUB_WORKSPACE/sonarqube-report.json https://devsecops-ver.azurewebsites.net/api/week3-sonar-report)
           echo "Sonar upload: $SONAR_RESPONSE"
-          ZAP_RESPONSE=$(curl -X POST -H "Authorization: Bearer $AZURE_ACCESS_TOKEN"  --data-binary @$GITHUB_WORKSPACE/report_json.json https://devsecops-ver.azurewebsites.net/api/week3-zap-report)
+          ZAP_RESPONSE=$(curl -X POST -H "Authorization: Bearer $AZURE_ACCESS_TOKEN" --data-binary @$GITHUB_WORKSPACE/report_json.json https://devsecops-ver.azurewebsites.net/api/week3-zap-report)
           echo "Zap upload: $ZAP_RESPONSE"
-   
-  image-scan:
-    needs: [test]
-    if: true
+
+  security_gate:
+    needs: [sonarqube, dast, image-scan]
     runs-on: ubuntu-latest
     steps:
-        - name: Scan image
-          uses: anchore/scan-action@v3
-          id: image-scan
-          with:
-            image: ${{ secrets.DOCKERHUB_USERNAME }}/devops-labs:latest
-            fail-build: false
-            output-format: json
-        - name: Save Image Scan Report
-          run: echo "${{ steps.image-scan.outputs.json }}" > image-scan-report.json
-        - name: Upload Image report
-          uses: actions/upload-artifact@v4
-          with:
-           name: image-report
-           path: image-scan-report.json
+      - name: Download sonarqube-report
+        uses: actions/download-artifact@v4
+        with:
+          name: sonarqube-report
+          path: ${{ github.workspace }}
+      - name: Download zap-report
+        uses: actions/download-artifact@v4
+        with:
+          name: zap-report
+          path: ${{ github.workspace }}
+      - name: Download image-report
+        uses: actions/download-artifact@v4
+        with:
+          name: image-report
+          path: ${{ github.workspace }}
+      - name: Read reports
+        run: |
+          IMAGE_RESULT_HIGH=$(cat image-scan-report.json
+          
