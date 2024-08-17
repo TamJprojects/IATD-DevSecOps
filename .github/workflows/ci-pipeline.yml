@@ -49,6 +49,7 @@ jobs:
           echo "Week1 container upload: $WEEK1_CONTAINER"
   
   sonarqube:
+    needs: build
     if: true
     runs-on: ubuntu-latest
     steps:
@@ -74,7 +75,7 @@ jobs:
         path: sonarqube-report.json    
 
   dast:
-    needs: [sonarqube]
+    needs: [build, sonarqube]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
