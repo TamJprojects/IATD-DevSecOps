@@ -52,7 +52,7 @@ jobs:
           name: sonarqube-report
           path: sonarqube-report.json    
 
-dast:
+  dast:
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -89,7 +89,7 @@ dast:
           name: zap-report
           path: report_json.json  # Ensure this file exists # Adjust the output file to match the expected name in security_gate
 
-    build:
+  build:
     needs: []
     if: true
     runs-on: ubuntu-latest
@@ -111,7 +111,7 @@ dast:
         push: true
         tags: ${{ secrets.DOCKERHUB_USERNAME }}/devops-labs:latest
 
-    submit_results:
+  submit_results:
     needs: [build]
     runs-on: ubuntu-latest
     steps:
@@ -146,7 +146,7 @@ dast:
           ZAP_RESPONSE=$(curl -X POST -H "Authorization: Bearer $AZURE_ACCESS_TOKEN" --data-binary @$GITHUB_WORKSPACE/report_json.json https://devsecops-ver.azurewebsites.net/api/week3-zap-report)
           echo "Zap upload: $ZAP_RESPONSE"
 
-    security_gate:
+  security_gate:
     needs: [sonarqube, dast, image-scan]
     runs-on: ubuntu-latest
     steps:
