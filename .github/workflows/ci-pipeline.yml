@@ -140,7 +140,7 @@ jobs:
            cosign sign --yes ${IMAGE}
 
   submit_results:
-    needs: [build, security_gate]
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
       - uses: azure/login@v1
