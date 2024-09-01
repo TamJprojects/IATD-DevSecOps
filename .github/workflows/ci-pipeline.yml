@@ -52,7 +52,7 @@ jobs:
           name: sonarqube-report
           path: sonarqube-report.json    
 
-  dast:
+dast:
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -71,26 +71,6 @@ jobs:
         with:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/devops-labs:dast-test
-      - name: Log in to Azure
-        uses: azure/login@v1 
-        with:  
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - name: Deploy DAST Container App
-        uses: azure/container-apps-deploy-action@v1
-        with:
-          imageToDeploy: ${{ secrets.DOCKERHUB_USERNAME }}/devops-labs:dast-test
-          containerAppName: devops-test-app
-          containerAppEnvironment: devops-app-env
-          resourceGroup: devsecops-lab
-          location: australiaeast
-          targetPort: 5000
-      - name: Get deployed DAST app URL
-        run: |
-          export FQDN=$(az containerapp show -n devops-test-app -g devsecops-lab --query properties.configuration.ingress.fqdn -o tsv)
-          echo "TEST_APP_URL=https://$FQDN" >> $GITHUB_ENV
-          echo "TEST_APP_URL=https://$FQDN" 
-          curl https://$FQDN/ui
-          sed -i "s,http://localhost:5000,https://$FQDN,g" $GITHUB_WORKSPACE/openapi_specs/openapi3.yml  
       - name: ZAP Scan
         uses: zaproxy/action-api-scan@v0.6.0
         with:
@@ -107,13 +87,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zap-report
-          path: report_json.json  # Adjust the output file to match the expected name in security_gate
+          path: report_json.json  # Ensure this file exists # Adjust the output file to match the expected name in security_gate
 
-  build:
-   needs: []
-   if: true
-   runs-on: ubuntu-latest
-   steps:
+    build:
+    needs: []
+    if: true
+    runs-on: ubuntu-latest
+    steps:
      - name: Set up QEMU
        uses: docker/setup-qemu-action@v3
      - name: Set up Docker Buildx
@@ -131,7 +111,7 @@ jobs:
         push: true
         tags: ${{ secrets.DOCKERHUB_USERNAME }}/devops-labs:latest
 
-  submit_results:
+    submit_results:
     needs: [build]
     runs-on: ubuntu-latest
     steps:
@@ -166,7 +146,7 @@ jobs:
           ZAP_RESPONSE=$(curl -X POST -H "Authorization: Bearer $AZURE_ACCESS_TOKEN" --data-binary @$GITHUB_WORKSPACE/report_json.json https://devsecops-ver.azurewebsites.net/api/week3-zap-report)
           echo "Zap upload: $ZAP_RESPONSE"
 
-  security_gate:
+    security_gate:
     needs: [sonarqube, dast, image-scan]
     runs-on: ubuntu-latest
     steps:
