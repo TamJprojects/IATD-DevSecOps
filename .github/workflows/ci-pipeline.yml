@@ -7,32 +7,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Add your test steps here
-
-  image-scan:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Scan image
-        uses: anchore/scan-action@v3
-        id: image-scan
+      - name: Set up Node.js (if your tests need Node.js)
+        uses: actions/setup-node@v3
         with:
-          image: ${{ secrets.DOCKERHUB_USERNAME }}/devops-labs:latest
-          fail-build: false
-          output-format: json
-      - name: Save Image Scan Report
-        run: echo "${{ steps.image-scan.outputs.json }}" > image-scan-report.json
-      - name: Upload Image report
+          node-version: '14'
+      - name: Install Dependencies
+        run: npm install  # Or any other command to install your project dependencies
+      - name: Run Tests
+        run: npm test  # Or another command to run your tests
+      - name: Upload Test Results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: image-report
-          path: image-scan-report.json
+          name: test-results
+          path: ./test-results  # Ensure this path matches where your test results are stored
 
   sonarqube:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: SonarQube Scan
@@ -40,17 +34,16 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      - run: |
+      - name: Save SonarQube Report
+        run: |
           sleep 30
           URL="${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?p=1&projectKey=devsecops-app&branch=main"
-          echo "Report URL $URL"
-          curl -u "${{ secrets.SONAR_TOKEN }}:${{ secrets.SONAR_TOKEN }}" "$URL" -o sonarqube-report.json 
+          curl -u "${{ secrets.SONAR_TOKEN }}" "$URL" -o sonarqube-report.json
       - name: Upload SonarQube report
-        id: artifact-sonarqube
         uses: actions/upload-artifact@v4
         with:
           name: sonarqube-report
-          path: sonarqube-report.json    
+          path: sonarqube-report.json
 
   dast:
     needs: test
@@ -72,44 +65,60 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/devops-labs:dast-test
       - name: ZAP Scan
-        uses: zaproxy/action-api-scan@v0.6.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          docker_name: 'ghcr.io/zaproxy/zaproxy:stable'
-          format: openapi
-          target: /zap/wrk/openapi_specs/openapi3.yml
-          rules_file_name: .zap/rules.tsv
-          cmd_options: '-a -c /zap/wrk/.zap/rules.tsv'
-          fail_action: false
-          allow_issue_writing: false
+        run: |
+          docker run -v $(pwd):/zap/wrk:rw -t owasp/zap2docker-stable zap-full-scan.py -t https://$TARGET -g gen.conf -r testreport.html
       - name: Upload ZAP report
-        id: artifact-zap
         uses: actions/upload-artifact@v4
         with:
           name: zap-report
-          path: report_json.json  # Ensure this file exists # Adjust the output file to match the expected name in security_gate
+          path: testreport.html
+
+  image-scan:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Scan Image
+        uses: anchore/scan-action@v3
+        with:
+          image: ${{ secrets.DOCKERHUB_USERNAME }}/devops-labs:latest
+          fail-build: false
+          output-format: json
+      - name: Save Image Scan Report
+        run: echo "${{ steps.image-scan.outputs.json }}" > image-scan-report.json
+      - name: Upload Image report
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-report
+          path: image-scan-report.json
 
   build:
     needs: []
     if: true
     runs-on: ubuntu-latest
     steps:
-     - name: Set up QEMU
-       uses: docker/setup-qemu-action@v3
-     - name: Set up Docker Buildx
-       uses: docker/setup-buildx-action@v3
-     - name: Login to Docker Hub
-       uses: docker/login-action@v3
-       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-     - name: Build and push
-       uses: docker/build-push-action@v5
-       with:
-        sbom: true
-        provenance: true
-        push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/devops-labs:latest
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          sbom: true
+          provenance: true
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/devops-labs:latest
 
   submit_results:
     needs: [build]
@@ -143,7 +152,7 @@ jobs:
           echo "Week1 container upload: $WEEK1_CONTAINER"
           SONAR_RESPONSE=$(curl -X POST -H "Authorization: Bearer $AZURE_ACCESS_TOKEN" --data-binary @$GITHUB_WORKSPACE/sonarqube-report.json https://devsecops-ver.azurewebsites.net/api/week3-sonar-report)
           echo "Sonar upload: $SONAR_RESPONSE"
-          ZAP_RESPONSE=$(curl -X POST -H "Authorization: Bearer $AZURE_ACCESS_TOKEN" --data-binary @$GITHUB_WORKSPACE/report_json.json https://devsecops-ver.azurewebsites.net/api/week3-zap-report)
+          ZAP_RESPONSE=$(curl -X POST -H "Authorization: Bearer $AZURE_ACCESS_TOKEN" --data-binary @$GITHUB_WORKSPACE/testreport.html https://devsecops-ver.azurewebsites.net/api/week3-zap-report)
           echo "Zap upload: $ZAP_RESPONSE"
 
   security_gate:
@@ -167,5 +176,6 @@ jobs:
           path: ${{ github.workspace }}
       - name: Read reports
         run: |
-          IMAGE_RESULT_HIGH=$(cat image-scan-report.json
+          IMAGE_RESULT_HIGH=$(cat image-scan-report.json)
+
           
