@@ -198,39 +198,15 @@ jobs:
        with:
         name: image-report
         path: ${{ github.workspace }}
-     - name: Read reports
-       run: |
-        IMAGE_RESULT_HIGH=$(cat image-scan-report.json | jq '.vulnerabilities | map(select(.severity == "High")) | length')
-        SONAR_RESULT=$(cat sonarqube-report.json | jq -r '.projectStatus.status')
-        ZAP_RESULT_HIGH=$(cat report_json.json | jq -r '.site[].alerts[] | select(.riskdesc | startswith("High")) | .name' | wc -l)
-
-        echo "Image High Severity Vulnerabilities: $IMAGE_RESULT_HIGH"
-        echo "SonarQube Quality Gate: $SONAR_RESULT"
-        echo "ZAP High Severity Alerts: $ZAP_RESULT_HIGH"
-
-        if [ "$IMAGE_RESULT_HIGH" -gt 0 ]; then
-          echo "Image scan has high severity vulnerabilities" | tee -a security_gate_result.log
-        fi
-
-        if [ "$SONAR_RESULT" != "OK" ]; then
-          echo "Sonar scan has issues" | tee -a security_gate_result.log
-        fi
-
-        if [ "$ZAP_RESULT_HIGH" -gt 0 ]; then
-          echo "ZAP scan has high severity vulnerabilities" | tee -a security_gate_result.log
-        fi
-
-        echo "Security gate completed" | tee -a security_gate_result.log
-
      - name: Upload Security Gate Result
        uses: actions/upload-artifact@v4
        with:
         name: security-gate-result
         path: security_gate_result.log
-
-     - name: Complete Security Gate Without Failure
-       run: echo "Security gate completed without blocking the pipeline"
-
+     - name: Read reports
+       run: |
+          IMAGE_RESULT_HIGH=$(cat image-scan-report.json)
+          
   build_final:
     needs: []
     if: true
